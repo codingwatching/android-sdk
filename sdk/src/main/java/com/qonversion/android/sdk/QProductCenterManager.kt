@@ -23,6 +23,7 @@ import com.qonversion.android.sdk.logger.Logger
 import com.qonversion.android.sdk.services.QUserInfoService
 import com.qonversion.android.sdk.storage.LaunchResultCacheWrapper
 import com.qonversion.android.sdk.storage.PurchasesCache
+import kotlinx.coroutines.*
 
 @SuppressWarnings("LongParameterList")
 class QProductCenterManager internal constructor(
@@ -110,16 +111,22 @@ class QProductCenterManager internal constructor(
         val adProvider = AdvertisingProvider()
         val launchCallback: QonversionLaunchCallback = getLaunchCallback(callback)
 
-        adProvider.init(context, object : AdvertisingProvider.Callback {
-            override fun onSuccess(advertisingId: String) {
-                advertisingID = advertisingId
+        val scope = CoroutineScope(Dispatchers.IO)
+        scope.launch {
+            try {
+                println("Coroutines. Fetching advId.")
+                advertisingID = adProvider.init(context)
+                println("Coroutines. Got advId: $advertisingID")
+            } catch (e: Throwable) {
+                // do nothing.
+                println("Coroutines. Error.")
+            } finally {
+                println("Coroutines. Launching.")
                 continueLaunchWithPurchasesInfo(launchCallback)
             }
-
-            override fun onFailure(t: Throwable) {
-                continueLaunchWithPurchasesInfo(launchCallback)
-            }
-        })
+        }
+        println("Coroutines. Cancelling.")
+        scope.cancel();
     }
 
     fun loadProducts(

@@ -5,39 +5,30 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.concurrent.LinkedBlockingQueue
 
 class AdvertisingProvider {
 
-    interface Callback {
-        fun onSuccess(advertisingId: String)
-        fun onFailure(t: Throwable)
-    }
+    suspend fun init(context: Context) = withContext(Dispatchers.IO) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            throw IllegalStateException("Cannot be called from the main thread")
+        }
 
-    fun init(context: Context, callback: Callback) {
-        Thread(Runnable {
-            if (Looper.myLooper() == Looper.getMainLooper()) {
-                throw IllegalStateException("Cannot be called from the main thread")
-            }
+        val connection = AdvertisingConnection()
+        val intent = Intent("com.google.android.gms.ads.identifier.service.START").apply {
+            setPackage("com.google.android.gms")
+        }
+        if (!context.bindService(intent, connection, Context.BIND_AUTO_CREATE)) {
+            throw IllegalStateException("Binding to advertising id service failed")
+        }
 
-            val connection = AdvertisingConnection()
-            val intent = Intent("com.google.android.gms.ads.identifier.service.START").apply {
-                setPackage("com.google.android.gms")
-            }
-            if (!context.bindService(intent, connection, Context.BIND_AUTO_CREATE)) {
-                callback.onFailure(IllegalStateException("Binding to advertising id service failed"))
-            }
-
-            try {
-                AdvertisingInterface(connection.binder).id?.let { id ->
-                    callback.onSuccess(id)
-                }
-            } catch (e: Exception) {
-                callback.onFailure(e)
-            } finally {
-                context.unbindService(connection)
-            }
-        }).start()
+        try {
+            AdvertisingInterface(connection.binder).id ?: ""
+        } finally {
+            context.unbindService(connection)
+        }
     }
 
     class AdvertisingConnection : ServiceConnection {
